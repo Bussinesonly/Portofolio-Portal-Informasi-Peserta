@@ -163,6 +163,7 @@ function initAccordion(headers) {
     const firstCard = headers[0]?.closest('.info-card');
     if (firstCard) {
         firstCard.classList.add('is-open');
+        headers[0].setAttribute('aria-expanded', 'true');
     }
 
     headers.forEach(function (header) {
@@ -173,11 +174,13 @@ function initAccordion(headers) {
             // Close all
             document.querySelectorAll('.info-card.is-open').forEach(function (c) {
                 c.classList.remove('is-open');
+                c.querySelector('.info-card-header')?.setAttribute('aria-expanded', 'false');
             });
 
             // Toggle current
             if (!isOpen) {
                 card.classList.add('is-open');
+                this.setAttribute('aria-expanded', 'true');
                 // Scroll into view if needed
                 setTimeout(function () {
                     card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });

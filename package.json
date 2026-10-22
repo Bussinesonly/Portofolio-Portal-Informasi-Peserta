@@ -1,0 +1,22 @@
+{
+  "name": "portal-informasi-peserta",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Portal informasi peserta berbasis Express dan Supabase.",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "check": "node --check server.js && node --check api/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.16.3",
+    "sanitize-html": "^2.17.0"
+  }
+}
