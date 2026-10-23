@@ -464,6 +464,12 @@ img { max-width: 100%; display: block; }
     margin-bottom: 14px;
 }
 
+.auth-actions .btn {
+    font-size: 0.875rem;
+    min-height: 38px;
+    padding: 9px 16px;
+}
+
 .btn-secondary,
 .btn-outline {
     align-items: center;
