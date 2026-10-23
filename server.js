@@ -37,8 +37,8 @@ const departments = [
   'Procurement', 'Quality Assurance', 'Public Relations', 'Lainnya',
 ];
 
-if (!sessionSecret && isProduction) {
-  throw new Error('SESSION_SECRET wajib diatur di environment production.');
+if (isProduction && (!sessionSecret || !process.env.SUPABASE_DB_URL)) {
+  throw new Error('SESSION_SECRET dan SUPABASE_DB_URL wajib diatur di environment production.');
 }
 
 const pool = new Pool({
@@ -140,18 +140,32 @@ function safeContent(content) {
 }
 
 async function seedInformation() {
-  const { rows } = await pool.query('SELECT COUNT(*)::int AS count FROM informasi');
-  if (rows[0].count > 0) return;
-  const items = [
-    [1, 'jadwal', 'Jadwal Keberangkatan', 'clock', '<p><strong>Hari/Tanggal:</strong> Sabtu, 15 November 2026</p><p><strong>Waktu Berkumpul:</strong> Pukul 05.30 WIB</p><p><strong>Estimasi Berangkat:</strong> Pukul 06.00 WIB</p><p><strong>Titik Kumpul:</strong> Lobby Utama Gedung A</p>'],
-    [2, 'rute', 'Rute Perjalanan', 'map', '<p>Perjalanan menuju <strong>Taman Wisata Alam Gunung Pancar, Bogor</strong>.</p><p><strong>Estimasi Waktu Tempuh:</strong> ± 2 jam 30 menit</p><p><strong>Rute:</strong> Jakarta → Tol Jagorawi → Exit Sentul → Gunung Pancar</p>'],
-    [3, 'jadwal', 'Susunan Acara', 'calendar', '<table class="schedule-table"><thead><tr><th>Waktu</th><th>Kegiatan</th></tr></thead><tbody><tr><td>05.30 – 06.00</td><td>Registrasi &amp; Persiapan</td></tr><tr><td>06.00 – 08.30</td><td>Perjalanan Menuju Lokasi</td></tr><tr><td>09.00 – 12.00</td><td>Kegiatan Outbound &amp; Team Building</td></tr><tr><td>16.00 – 18.30</td><td>Perjalanan Kembali</td></tr></tbody></table>'],
-    [4, 'persiapan', 'Perlengkapan yang Dibawa', 'bag', '<ul class="checklist"><li>Pakaian olahraga yang nyaman</li><li>Sepatu olahraga atau sneakers</li><li>Jaket tipis atau jas hujan</li><li>Obat-obatan pribadi</li><li>Botol minum tumbler</li><li>Power bank dan kabel charger</li></ul>'],
-    [5, 'peraturan', 'Peraturan Peserta', 'shield', '<ol><li>Mematuhi instruksi panitia selama kegiatan.</li><li>Tidak meninggalkan area kegiatan tanpa izin.</li><li>Menjaga kebersihan dan ketertiban lokasi.</li><li>Melaporkan kondisi kesehatan khusus kepada panitia.</li></ol>'],
-    [6, 'kontak', 'Kontak Darurat & Panitia', 'phone', '<p>Hubungi koordinator lapangan atau tim medis yang ditetapkan panitia jika terjadi keadaan darurat.</p>'],
-  ];
-  for (const item of items) {
-    await pool.query('INSERT INTO informasi (urutan, kategori, judul, ikon, konten) VALUES ($1, $2, $3, $4, $5)', item);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1)', [2_026_102_300]);
+    const { rows } = await client.query('SELECT COUNT(*)::int AS count FROM informasi');
+    if (rows[0].count > 0) {
+      await client.query('COMMIT');
+      return;
+    }
+    const items = [
+      [1, 'jadwal', 'Jadwal Keberangkatan', 'clock', '<p><strong>Hari/Tanggal:</strong> Sabtu, 15 November 2026</p><p><strong>Waktu Berkumpul:</strong> Pukul 05.30 WIB</p><p><strong>Estimasi Berangkat:</strong> Pukul 06.00 WIB</p><p><strong>Titik Kumpul:</strong> Lobby Utama Gedung A</p>'],
+      [2, 'rute', 'Rute Perjalanan', 'map', '<p>Perjalanan menuju <strong>Taman Wisata Alam Gunung Pancar, Bogor</strong>.</p><p><strong>Estimasi Waktu Tempuh:</strong> ± 2 jam 30 menit</p><p><strong>Rute:</strong> Jakarta → Tol Jagorawi → Exit Sentul → Gunung Pancar</p>'],
+      [3, 'jadwal', 'Susunan Acara', 'calendar', '<table class="schedule-table"><thead><tr><th>Waktu</th><th>Kegiatan</th></tr></thead><tbody><tr><td>05.30 – 06.00</td><td>Registrasi &amp; Persiapan</td></tr><tr><td>06.00 – 08.30</td><td>Perjalanan Menuju Lokasi</td></tr><tr><td>09.00 – 12.00</td><td>Kegiatan Outbound &amp; Team Building</td></tr><tr><td>16.00 – 18.30</td><td>Perjalanan Kembali</td></tr></tbody></table>'],
+      [4, 'persiapan', 'Perlengkapan yang Dibawa', 'bag', '<ul class="checklist"><li>Pakaian olahraga yang nyaman</li><li>Sepatu olahraga atau sneakers</li><li>Jaket tipis atau jas hujan</li><li>Obat-obatan pribadi</li><li>Botol minum tumbler</li><li>Power bank dan kabel charger</li></ul>'],
+      [5, 'peraturan', 'Peraturan Peserta', 'shield', '<ol><li>Mematuhi instruksi panitia selama kegiatan.</li><li>Tidak meninggalkan area kegiatan tanpa izin.</li><li>Menjaga kebersihan dan ketertiban lokasi.</li><li>Melaporkan kondisi kesehatan khusus kepada panitia.</li></ol>'],
+      [6, 'kontak', 'Kontak Darurat & Panitia', 'phone', '<p>Hubungi koordinator lapangan atau tim medis yang ditetapkan panitia jika terjadi keadaan darurat.</p>'],
+    ];
+    for (const item of items) {
+      await client.query('INSERT INTO informasi (urutan, kategori, judul, ikon, konten) VALUES ($1, $2, $3, $4, $5)', item);
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
 }
 
