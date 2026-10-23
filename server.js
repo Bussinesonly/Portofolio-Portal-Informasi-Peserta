@@ -185,13 +185,39 @@ function registerPage(req, res, errors = [], old = {}) {
   const options = departments.map((department) => `<option value="${e(department)}" ${old.departemen === department ? 'selected' : ''}>${e(department)}</option>`).join('');
   const errorBlock = errors.length ? `<div class="alert alert-error" role="alert"><span class="alert-icon">${icon('info', 18)}</span><div>${errors.map((error) => `<div>${e(error)}</div>`).join('')}</div></div>` : '';
   const content = `<div class="page-wrapper"><section class="hero"><div class="hero-logo">${icon('compass', 32)}</div><h1>Selamat Datang, Peserta!</h1><p>Daftarkan diri Anda untuk mengakses informasi lengkap perjalanan kegiatan.</p></section><section class="form-section"><div class="form-card"><h2 class="form-title">Registrasi Peserta</h2><p class="form-desc">Lengkapi data berikut untuk melanjutkan ke portal informasi.</p>${errorBlock}<form id="registerForm" method="post" action="/register" novalidate><input type="hidden" name="csrf_token" value="${e(token)}"><div class="form-group"><label class="form-label" for="nama">Nama Lengkap <span class="required">*</span></label><input class="form-input" id="nama" name="nama" value="${e(old.nama)}" maxlength="150" autocomplete="name" required><div class="field-error" id="namaError"></div></div><div class="form-group"><label class="form-label" for="departemen">Departemen <span class="required">*</span></label><select class="form-select" id="departemen" name="departemen" required><option value="">Pilih Departemen</option>${options}</select><div class="field-error" id="departemenError"></div></div><div class="form-group"><label class="form-label" for="no_hp">Nomor HP <span class="required">*</span></label><div class="phone-input-group"><span class="phone-prefix">+62</span><input class="form-input" id="no_hp" name="no_hp" value="${e(String(old.no_hp || '').replace(/^0/, ''))}" maxlength="15" inputmode="tel" autocomplete="tel" required></div><div class="form-hint">Format: 8xxxxxxxxxx (tanpa angka 0 di depan)</div><div class="field-error" id="no_hpError"></div></div><div class="form-group"><div class="form-check"><input id="consent" type="checkbox" name="consent" value="yes" ${old.consent ? 'checked' : ''} required><label class="form-check-label" for="consent">Saya menyetujui pemrosesan data pribadi sesuai <a href="/privacy" target="_blank" rel="noopener">Kebijakan Privasi</a>.</label></div><div class="field-error" id="consentError"></div></div><button class="btn btn-primary" id="submitBtn" type="submit"><span class="btn-text">Daftar dan Lanjutkan</span></button></form></div></section>${footer()}</div>`;
-  res.status(errors.length ? 422 : 200).send(layout('Registrasi', content, '<script src="/script.js"></script>'));
+  const contentWithLogin = content.replace('</form></div></section>', '</form><p class="form-switch">Sudah terdaftar? <a href="/login">Masuk di sini</a>.</p></div></section>');
+  res.status(errors.length ? 422 : 200).send(layout('Registrasi', contentWithLogin, '<script src="/script.js"></script>'));
+}
+
+function loginPage(req, res, error = '', old = {}) {
+  const token = csrfToken(req, res);
+  const errorBlock = error ? `<div class="alert alert-error" role="alert">${e(error)} <a href="/register">Daftar sekarang</a>.</div>` : '';
+  const content = `<div class="page-wrapper"><section class="hero"><div class="hero-logo">${icon('compass', 32)}</div><h1>Masuk Peserta</h1><p>Gunakan nama dan nomor HP yang sudah didaftarkan.</p></section><section class="form-section"><div class="form-card"><h2 class="form-title">Login Peserta</h2><p class="form-desc">Belum punya akun? Anda harus <a href="/register">signup terlebih dahulu</a>.</p>${errorBlock}<form method="post" action="/login"><input type="hidden" name="csrf_token" value="${e(token)}"><div class="form-group"><label class="form-label" for="loginNama">Nama Lengkap</label><input class="form-input" id="loginNama" name="nama" value="${e(old.nama || '')}" maxlength="150" autocomplete="name" required></div><div class="form-group"><label class="form-label" for="loginNoHp">Nomor HP</label><input class="form-input" id="loginNoHp" name="no_hp" value="${e(old.no_hp || '')}" maxlength="15" inputmode="tel" autocomplete="tel" placeholder="08xxxxxxxxxx" required></div><button class="btn btn-primary" type="submit">Masuk ke Portal</button></form><p class="form-switch">Belum terdaftar? <a href="/register">Signup di sini</a>.</p></div></section>${footer()}</div>`;
+  res.status(error ? 401 : 200).send(layout('Login Peserta', content));
 }
 
 app.get(['/', '/register'], async (req, res, next) => {
   try {
     if (await participant(req)) return res.redirect('/info');
     return registerPage(req, res);
+  } catch (error) { next(error); }
+});
+
+app.get('/login', (req, res) => {
+  if (session(req)?.role === 'participant') return res.redirect('/info');
+  return loginPage(req, res);
+});
+
+app.post('/login', async (req, res, next) => {
+  try {
+    const nama = String(req.body.nama || '').trim();
+    const noHp = normalizePhone(req.body.no_hp);
+    if (!csrfValid(req)) return loginPage(req, res, 'Sesi tidak valid. Silakan muat ulang halaman.', { nama, no_hp: req.body.no_hp });
+    if (nama.length < 3 || !/^0\d{9,13}$/.test(noHp)) return loginPage(req, res, 'Nama atau nomor HP belum valid.', { nama, no_hp: req.body.no_hp });
+    const { rows } = await pool.query('SELECT id, token FROM peserta WHERE nama_lengkap = $1 AND no_hp = $2 LIMIT 1', [nama, noHp]);
+    if (!rows[0]) return loginPage(req, res, 'Data belum terdaftar. Silakan signup terlebih dahulu.', { nama, no_hp: req.body.no_hp });
+    setSession(res, { sub: rows[0].id, token: rows[0].token, role: 'participant' }, 7 * 24 * 60 * 60);
+    return res.redirect(303, '/info');
   } catch (error) { next(error); }
 });
 

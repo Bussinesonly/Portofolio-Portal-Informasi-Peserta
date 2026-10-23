@@ -295,6 +295,18 @@ img { max-width: 100%; display: block; }
     line-height: 1.5;
 }
 
+.form-switch {
+    color: var(--gray-500);
+    margin: 18px 0 0;
+    text-align: center;
+}
+
+.form-switch a,
+.alert a {
+    color: var(--navy-700);
+    font-weight: 700;
+}
+
 /* ─── Form Elements ────────────────────────────────── */
 .form-group {
     margin-bottom: 20px;
