@@ -10,7 +10,7 @@
     "check": "node --check server.js && node --check api/index.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": "22.x"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",
