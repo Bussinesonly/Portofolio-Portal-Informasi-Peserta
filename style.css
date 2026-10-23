@@ -458,6 +458,33 @@ img { max-width: 100%; display: block; }
     overflow: hidden;
 }
 
+.auth-actions {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.btn-secondary,
+.btn-outline {
+    align-items: center;
+    border: 1px solid var(--navy-700);
+    border-radius: 8px;
+    display: inline-flex;
+    justify-content: center;
+    min-height: 44px;
+    text-decoration: none;
+}
+
+.btn-secondary {
+    background: var(--navy-700);
+    color: #fff;
+}
+
+.btn-outline {
+    background: transparent;
+    color: var(--navy-700);
+}
+
 .btn-primary {
     background: linear-gradient(135deg, var(--navy-700) 0%, var(--navy-600) 100%);
     color: var(--white);
