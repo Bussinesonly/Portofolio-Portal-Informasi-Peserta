@@ -28,7 +28,7 @@ loadLocalEnvironment();
 const app = express();
 const port = Number(process.env.PORT || 3000);
 const isProduction = process.env.NODE_ENV === 'production';
-const appName = 'Portal Informasi Peserta';
+const appName = 'Ruang Temu 2026';
 const sessionSecret = process.env.SESSION_SECRET;
 const departments = [
   'Human Resources', 'Finance & Accounting', 'Marketing & Sales',
@@ -37,16 +37,47 @@ const departments = [
   'Procurement', 'Quality Assurance', 'Public Relations', 'Lainnya',
 ];
 
+const demoInformation = [
+  { id: 1, urutan: 1, kategori: 'jadwal', judul: 'Jadwal Keberangkatan', ikon: 'clock', aktif: true, konten: '<p><strong>Hari/Tanggal:</strong> Sabtu, 15 November 2026</p><p><strong>Waktu berkumpul:</strong> 05.30 WIB</p><p><strong>Titik kumpul:</strong> Lobby Utama Gedung A</p>' },
+  { id: 2, urutan: 2, kategori: 'rute', judul: 'Rute Perjalanan', ikon: 'map', aktif: true, konten: '<p>Tujuan kegiatan adalah <strong>Taman Wisata Alam Gunung Pancar, Bogor</strong>.</p><p><strong>Rute:</strong> Jakarta → Tol Jagorawi → Exit Sentul → Gunung Pancar</p><p><strong>Estimasi waktu tempuh:</strong> ± 2 jam 30 menit</p>' },
+  { id: 3, urutan: 3, kategori: 'jadwal', judul: 'Susunan Acara', ikon: 'calendar', aktif: true, konten: '<table class="schedule-table"><thead><tr><th>Waktu</th><th>Kegiatan</th></tr></thead><tbody><tr><td>05.30–06.00</td><td>Registrasi dan persiapan</td></tr><tr><td>06.00–08.30</td><td>Perjalanan menuju lokasi</td></tr><tr><td>09.00–12.00</td><td>Outbound dan team building</td></tr><tr><td>16.00–18.30</td><td>Perjalanan kembali</td></tr></tbody></table>' },
+  { id: 4, urutan: 4, kategori: 'persiapan', judul: 'Perlengkapan yang Dibawa', ikon: 'bag', aktif: true, konten: '<ul class="checklist"><li>Pakaian dan sepatu olahraga yang nyaman</li><li>Jaket tipis atau jas hujan</li><li>Obat-obatan pribadi</li><li>Botol minum</li><li>Power bank dan kabel pengisi daya</li></ul>' },
+  { id: 5, urutan: 5, kategori: 'peraturan', judul: 'Peraturan Peserta', ikon: 'shield', aktif: true, konten: '<ol><li>Mematuhi arahan panitia selama kegiatan.</li><li>Tidak meninggalkan area kegiatan tanpa izin.</li><li>Menjaga kebersihan dan ketertiban lokasi.</li><li>Melaporkan kondisi kesehatan khusus kepada panitia.</li></ol>' },
+  { id: 6, urutan: 6, kategori: 'kontak', judul: 'Kontak Darurat & Panitia', ikon: 'phone', aktif: true, konten: '<p>Untuk keadaan darurat, hubungi koordinator lapangan yang dibagikan panitia sebelum keberangkatan.</p>' },
+];
+
+class DemoPool {
+  constructor() { this.participants = []; this.information = demoInformation.map((item) => ({ ...item })); }
+  async query(sql, params = []) {
+    const normalized = sql.replace(/\s+/g, ' ').trim().toLowerCase();
+    if (normalized.startsWith('begin') || normalized.startsWith('commit') || normalized.startsWith('rollback') || normalized.startsWith('select pg_advisory')) return { rows: [] };
+    if (normalized.includes('select count(*)::int as count from informasi')) return { rows: [{ count: this.information.length }] };
+    if (normalized.includes('from peserta where id = $1 and token = $2')) return { rows: this.participants.filter((item) => item.id === params[0] && item.token === params[1]).map(({ id, nama_lengkap, departemen, token }) => ({ id, nama_lengkap, departemen, token })) };
+    if (normalized.includes('from peserta where nama_lengkap = $1 and no_hp = $2')) return { rows: this.participants.filter((item) => item.nama_lengkap === params[0] && item.no_hp === params[1]).map(({ id, token }) => ({ id, token })) };
+    if (normalized.includes('from peserta where no_hp = $1 and nama_lengkap = $2')) return { rows: this.participants.filter((item) => item.no_hp === params[0] && item.nama_lengkap === params[1]).map(({ id, token }) => ({ id, token })) };
+    if (normalized.startsWith('insert into peserta')) { const item = { id: this.participants.length + 1, nama_lengkap: params[0], departemen: params[1], no_hp: params[2], token: params[3], created_at: new Date(), last_access: new Date() }; this.participants.push(item); return { rows: [{ id: item.id, token: item.token }] }; }
+    if (normalized.startsWith('update peserta')) return { rows: [] };
+    if (normalized.includes('select judul, ikon, konten, kategori from informasi')) return { rows: this.information.filter((item) => item.aktif).sort((a, b) => a.urutan - b.urutan) };
+    if (normalized.includes('select nama_lengkap, departemen, no_hp, created_at from peserta')) return { rows: [...this.participants].reverse() };
+    if (normalized.includes('select id, urutan, judul, kategori, aktif from informasi')) return { rows: [...this.information].sort((a, b) => a.urutan - b.urutan) };
+    if (normalized.startsWith('update informasi set aktif')) { const item = this.information.find((entry) => entry.id === params[0]); if (item) item.aktif = !item.aktif; return { rows: [] }; }
+    if (normalized.startsWith('delete from informasi')) { this.information = this.information.filter((item) => item.id !== params[0]); return { rows: [] }; }
+    if (normalized.startsWith('insert into informasi')) { this.information.push({ id: Math.max(0, ...this.information.map((item) => item.id)) + 1, urutan: this.information.length + 1, judul: params[0], kategori: params[1], ikon: params[2], konten: params[3], aktif: true }); return { rows: [] }; }
+    return { rows: [] };
+  }
+  async connect() { return { query: this.query.bind(this), release() {} }; }
+}
+
 if (isProduction && (!sessionSecret || !process.env.SUPABASE_DB_URL)) {
   throw new Error('SESSION_SECRET dan SUPABASE_DB_URL wajib diatur di environment production.');
 }
 
-const pool = new Pool({
+const pool = process.env.SUPABASE_DB_URL ? new Pool({
   connectionString: process.env.SUPABASE_DB_URL,
   ssl: process.env.SUPABASE_DB_URL ? { rejectUnauthorized: false } : undefined,
   max: 1,
   idleTimeoutMillis: 10_000,
-});
+}) : new DemoPool();
 
 app.disable('x-powered-by');
 app.use(express.urlencoded({ extended: false, limit: '100kb' }));
@@ -184,15 +215,14 @@ function registerPage(req, res, errors = [], old = {}) {
   const token = csrfToken(req, res);
   const options = departments.map((department) => `<option value="${e(department)}" ${old.departemen === department ? 'selected' : ''}>${e(department)}</option>`).join('');
   const errorBlock = errors.length ? `<div class="alert alert-error" role="alert"><span class="alert-icon">${icon('info', 18)}</span><div>${errors.map((error) => `<div>${e(error)}</div>`).join('')}</div></div>` : '';
-  const content = `<div class="page-wrapper"><section class="hero"><div class="hero-logo">${icon('compass', 32)}</div><h1>Selamat Datang, Peserta!</h1><p>Daftarkan diri Anda untuk mengakses informasi lengkap perjalanan kegiatan.</p></section><section class="form-section"><div class="form-card"><h2 class="form-title">Registrasi Peserta</h2><p class="form-desc">Lengkapi data berikut untuk melanjutkan ke portal informasi.</p>${errorBlock}<form id="registerForm" method="post" action="/register" novalidate><input type="hidden" name="csrf_token" value="${e(token)}"><div class="form-group"><label class="form-label" for="nama">Nama Lengkap <span class="required">*</span></label><input class="form-input" id="nama" name="nama" value="${e(old.nama)}" maxlength="150" autocomplete="name" required><div class="field-error" id="namaError"></div></div><div class="form-group"><label class="form-label" for="departemen">Departemen <span class="required">*</span></label><select class="form-select" id="departemen" name="departemen" required><option value="">Pilih Departemen</option>${options}</select><div class="field-error" id="departemenError"></div></div><div class="form-group"><label class="form-label" for="no_hp">Nomor HP <span class="required">*</span></label><div class="phone-input-group"><span class="phone-prefix">+62</span><input class="form-input" id="no_hp" name="no_hp" value="${e(String(old.no_hp || '').replace(/^0/, ''))}" maxlength="15" inputmode="tel" autocomplete="tel" required></div><div class="form-hint">Format: 8xxxxxxxxxx (tanpa angka 0 di depan)</div><div class="field-error" id="no_hpError"></div></div><div class="form-group"><div class="form-check"><input id="consent" type="checkbox" name="consent" value="yes" ${old.consent ? 'checked' : ''} required><label class="form-check-label" for="consent">Saya menyetujui pemrosesan data pribadi sesuai <a href="/privacy" target="_blank" rel="noopener">Kebijakan Privasi</a>.</label></div><div class="field-error" id="consentError"></div></div><button class="btn btn-primary" id="submitBtn" type="submit"><span class="btn-text">Daftar dan Lanjutkan</span></button></form></div></section>${footer()}</div>`;
-  const contentWithLogin = content.replace('<button class="btn btn-primary" id="submitBtn" type="submit"><span class="btn-text">Daftar dan Lanjutkan</span></button>', '<div class="auth-actions"><button class="btn btn-secondary" id="submitBtn" type="submit"><span class="btn-text">Sign Up</span></button><a class="btn btn-outline" href="/login">Login</a></div>');
-  res.status(errors.length ? 422 : 200).send(layout('Registrasi', contentWithLogin, '<script src="/script.js"></script>'));
+  const content = `<div class="page-wrapper"><section class="hero"><div class="hero-logo">${icon('compass', 32)}</div><h1>Ruang Temu dimulai dari sini.</h1><p>Daftarkan diri untuk menerima seluruh informasi perjalanan, jadwal, dan kebutuhan kegiatan.</p></section><section class="form-section"><div class="form-card"><h2 class="form-title">Registrasi Peserta</h2><p class="form-desc">Data ini hanya digunakan untuk akses portal dan koordinasi kegiatan.</p>${errorBlock}<form id="registerForm" method="post" action="/register" novalidate><input type="hidden" name="csrf_token" value="${e(token)}"><div class="form-group"><label class="form-label" for="nama">Nama Lengkap <span class="required">*</span></label><input class="form-input" id="nama" name="nama" value="${e(old.nama)}" maxlength="150" autocomplete="name" required><div class="field-error" id="namaError"></div></div><div class="form-group"><label class="form-label" for="departemen">Departemen <span class="required">*</span></label><select class="form-select" id="departemen" name="departemen" required><option value="">Pilih Departemen</option>${options}</select><div class="field-error" id="departemenError"></div></div><div class="form-group"><label class="form-label" for="no_hp">Nomor HP <span class="required">*</span></label><div class="phone-input-group"><span class="phone-prefix">+62</span><input class="form-input" id="no_hp" name="no_hp" value="${e(String(old.no_hp || '').replace(/^0/, ''))}" maxlength="15" inputmode="tel" autocomplete="tel" required></div><div class="form-hint">Masukkan tanpa angka 0 di depan, misalnya 8123456789.</div><div class="field-error" id="no_hpError"></div></div><div class="form-group"><div class="form-check"><input id="consent" type="checkbox" name="consent" value="yes" ${old.consent ? 'checked' : ''} required><label class="form-check-label" for="consent">Saya menyetujui pemrosesan data pribadi sesuai <a href="/privacy" target="_blank" rel="noopener">Kebijakan Privasi</a>.</label></div><div class="field-error" id="consentError"></div></div><div class="auth-actions"><button class="btn btn-primary" id="submitBtn" type="submit"><span class="btn-text">Daftar dan Lanjutkan</span></button><a class="btn btn-outline" href="/login">Saya sudah terdaftar</a></div></form></div></section>${footer()}</div>`;
+  res.status(errors.length ? 422 : 200).send(layout('Registrasi', content, '<script src="/script.js"></script>'));
 }
 
 function loginPage(req, res, error = '', old = {}) {
   const token = csrfToken(req, res);
   const errorBlock = error ? `<div class="alert alert-error" role="alert">${e(error)} <a href="/register">Daftar sekarang</a>.</div>` : '';
-  const content = `<div class="page-wrapper"><section class="hero"><div class="hero-logo">${icon('compass', 32)}</div><h1>Masuk Peserta</h1><p>Gunakan nama dan nomor HP yang sudah didaftarkan.</p></section><section class="form-section"><div class="form-card"><h2 class="form-title">Login Peserta</h2><p class="form-desc">Belum punya akun? Anda harus <a href="/register">signup terlebih dahulu</a>.</p>${errorBlock}<form method="post" action="/login"><input type="hidden" name="csrf_token" value="${e(token)}"><div class="form-group"><label class="form-label" for="loginNama">Nama Lengkap</label><input class="form-input" id="loginNama" name="nama" value="${e(old.nama || '')}" maxlength="150" autocomplete="name" required></div><div class="form-group"><label class="form-label" for="loginNoHp">Nomor HP</label><input class="form-input" id="loginNoHp" name="no_hp" value="${e(old.no_hp || '')}" maxlength="15" inputmode="tel" autocomplete="tel" placeholder="08xxxxxxxxxx" required></div><button class="btn btn-primary" type="submit">Masuk ke Portal</button></form><p class="form-switch">Belum terdaftar? <a href="/register">Signup di sini</a>.</p></div></section>${footer()}</div>`;
+  const content = `<div class="page-wrapper"><section class="hero"><div class="hero-logo">${icon('compass', 32)}</div><h1>Masuk ke Ruang Temu.</h1><p>Gunakan nama dan nomor HP yang sudah didaftarkan.</p></section><section class="form-section"><div class="form-card"><h2 class="form-title">Masuk Peserta</h2><p class="form-desc">Belum punya akses? <a href="/register">Daftar terlebih dahulu</a>.</p>${errorBlock}<form method="post" action="/login"><input type="hidden" name="csrf_token" value="${e(token)}"><div class="form-group"><label class="form-label" for="loginNama">Nama Lengkap</label><input class="form-input" id="loginNama" name="nama" value="${e(old.nama || '')}" maxlength="150" autocomplete="name" required></div><div class="form-group"><label class="form-label" for="loginNoHp">Nomor HP</label><input class="form-input" id="loginNoHp" name="no_hp" value="${e(old.no_hp || '')}" maxlength="15" inputmode="tel" autocomplete="tel" placeholder="08xxxxxxxxxx" required></div><button class="btn btn-primary" type="submit">Masuk ke Portal</button></form><p class="form-switch">Belum terdaftar? <a href="/register">Daftar di sini</a>.</p></div></section>${footer()}</div>`;
   res.status(error ? 401 : 200).send(layout('Login Peserta', content));
 }
 
